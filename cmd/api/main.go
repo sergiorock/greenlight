@@ -5,6 +5,7 @@ import (
 	"database/sql" // New import
 	"flag"
 	"fmt"
+	"greenlight/internal/data"
 	"log"
 	"net/http"
 	"os"
@@ -41,6 +42,7 @@ type config struct {
 type application struct {
 	config config
 	logger *log.Logger
+	models data.Models
 }
 
 func main() {
@@ -69,12 +71,6 @@ func main() {
 	// Initialize a new logger which writes messages to the standard out stream, // prefixed with the current date and time.
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
-	// Declare an instance of the application struct, containing the config struct and // the logger.
-	app := &application{
-		config: cfg,
-		logger: logger,
-	}
-
 	// Call the openDB() helper function (see below) to create the connection pool,
 	// passing in the config struct. If this returns an error, we log it and exit the
 	// application immediately.
@@ -90,6 +86,13 @@ func main() {
 	// Also log a message to say that the connection pool has been successfully
 	// established.
 	logger.Printf("database connection pool established")
+
+	// Declare an instance of the application struct, containing the config struct and // the logger.
+	app := &application{
+		config: cfg,
+		logger: logger,
+		models: data.NewModels(db),
+	}
 
 	// Declare a HTTP server with some sensible timeout settings, which listens on the
 	// port provided in the config struct and uses the servemux we created above as the handler.
