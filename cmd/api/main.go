@@ -13,6 +13,8 @@ import (
 	// compiler complaining that the package isn't being used.
 	"greenlight/internal/jsonlog"
 
+	"greenlight/internal/mailer"
+
 	_ "github.com/lib/pq"
 )
 
@@ -21,9 +23,7 @@ import (
 // number as a hard-coded global constant.
 const version = "1.0.0"
 
-// Add a db struct field to hold the configuration settings for our database connection pool.
-// For now this only holds the DSN, which we will read in from a command-line flag.
-// Add maxOpenConns, maxIdleConns and maxIdleTime fields to hold the configuration settings for the connection pool.
+// Update the config struct to hold the SMTP server settings
 type config struct {
 	port int
 	env  string
@@ -42,15 +42,22 @@ type config struct {
 		burst   int
 		enabled bool
 	}
+
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
-// and middleware. At the moment this only contains a copy of the config struct and a
-// logger, but it will grow to include a lot more as our build progresses.
+// Update the application struct to hold a new Mailer instance.
 type application struct {
 	config config
 	logger *jsonlog.Logger
 	models data.Models
+	mailer mailer.Mailer
 }
 
 func main() {
@@ -80,6 +87,16 @@ func main() {
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
 
+	// Read the SMTP server configuration settings into the config struct, using the
+	// Mailtrap settings as the default values. IMPORTANT: If you're following along,
+	// make sure to replace the default values for smtp-username and smtp-password
+	// with your own Mailtrap credentials.
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "19d773880b1d82", "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "90fd2f2727c00f", "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <lopez.sergio.n@gmail.com>", "SMTP sender")
+
 	flag.Parse()
 
 	// Initialize a new jsonlog.Logger which writes any messages *at or above* the INFO
@@ -101,11 +118,12 @@ func main() {
 	// Likewise use the PrintInfo() method to write a message at the INFO level.
 	logger.PrintInfo("database connection pool established", nil)
 
-	// Declare an instance of the application struct, containing the config struct and // the logger.
+	// Initialize a new Mailer instance using the settings from the command line // flags, and add it to the application struct.
 	app := &application{
 		config: cfg,
 		logger: logger,
 		models: data.NewModels(db),
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
 	// Call app.serve() to start the server.
